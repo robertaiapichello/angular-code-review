@@ -36,9 +36,6 @@ export class CustomerContextService {
   imports: [CommonModule, FormsModule, ReactiveFormsModule, AccountChartComponent],
   providers: [CustomerContextService],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  styles: [`
-    :host ::ng-deep .mat-mdc-card { padding: 0 !important; }
-  `],
   template: `
     <input [formControl]="search" placeholder="Cerca conto" />
 
