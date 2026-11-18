@@ -1,25 +1,39 @@
 import {
-  ChangeDetectionStrategy, Component, EventEmitter, OnInit, Output, Input,
+  ChangeDetectionStrategy, Component, EventEmitter, Injectable, NgZone, OnInit, Output, Input,
   effect, inject, signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { mergeMap } from 'rxjs';
+import { BehaviorSubject, mergeMap } from 'rxjs';
 import { Account } from './models';
-import { AbstractListComponent } from './abstract-list.component';
-import { CustomerContextService } from './customer-context.service';
 import { AccountChartComponent } from './account-chart.component';
-import { HighlightTooltipDirective } from './highlight-tooltip.directive';
+
+@Injectable()
+export class CustomerContextService {
+  private route = inject(ActivatedRoute);
+  private zone = inject(NgZone);
+
+  personUid$ = new BehaviorSubject<string>('');
+  lastUpdate = new Date();
+
+  constructor() {
+    this.route.params.subscribe(p => this.personUid$.next(p['personUid']));
+
+    this.zone.runOutsideAngular(() => {
+      setInterval(() => {
+        this.zone.run(() => (this.lastUpdate = new Date()));
+      }, 30000);
+    });
+  }
+}
 
 @Component({
   selector: 'app-customer-accounts',
   standalone: true,
-  imports: [
-    CommonModule, FormsModule, ReactiveFormsModule,
-    AccountChartComponent, HighlightTooltipDirective,
-  ],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, AccountChartComponent],
   providers: [CustomerContextService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
@@ -38,7 +52,7 @@ import { HighlightTooltipDirective } from './highlight-tooltip.directive';
 
     <div *ngIf="loading">Caricamento...</div>
 
-    <div *ngFor="let account of filtered" [appHighlightTooltip]="account.iban">
+    <div *ngFor="let account of filtered">
       {{ account.name }}: {{ formatBalance(account) }}
       <button (click)="select(account)">Dettaglio</button>
     </div>
@@ -46,7 +60,7 @@ import { HighlightTooltipDirective } from './highlight-tooltip.directive';
     <app-account-chart [accounts]="accounts" />
   `,
 })
-export class CustomerAccountsComponent extends AbstractListComponent<Account> implements OnInit {
+export class CustomerAccountsComponent implements OnInit {
   @Input() customerType = 'retail';
   @Output() accountSelected = new EventEmitter<Account>();
 
@@ -55,6 +69,7 @@ export class CustomerAccountsComponent extends AbstractListComponent<Account> im
 
   search = new FormControl('');
   statusFilter = 'all';
+  loading = false;
   accounts: Account[] = [];
   filtered: Account[] = [];
 
@@ -62,7 +77,6 @@ export class CustomerAccountsComponent extends AbstractListComponent<Account> im
   filteredCount = signal(0);
 
   constructor() {
-    super();
     effect(() => {
       this.filteredCount.set(
         this.selectedAccount() ? this.filtered.length : this.accounts.length,
@@ -86,7 +100,6 @@ export class CustomerAccountsComponent extends AbstractListComponent<Account> im
     this.ctx.personUid$.subscribe(uid => {
       this.http.get<Account[]>(`/api/customers/${uid}/accounts`).subscribe(accounts => {
         this.accounts = accounts;
-        this.items = accounts;
         this.applyFilters();
         this.loading = false;
       });
